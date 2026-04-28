@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Magic Eye Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0e0e0e; --surface: #1a1a1a; --surface2: #242424;
+      --border: #2e2e2e; --text: #e8e8e8; --text-dim: #888; --text-dimmer: #555;
+      --accent: #c8ff00; --accent-dim: #8aad00;
+      --radius: 10px; --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+    }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); padding: 1.5rem; min-height: 100vh; }
+    header { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+    h1 { font-family: var(--mono); font-size: 1.1rem; font-weight: 500; color: var(--accent); letter-spacing: -0.02em; }
+    .tagline { font-size: 12px; color: var(--text-dimmer); font-family: var(--mono); }
+    .grid { display: grid; grid-template-columns: 310px 1fr; gap: 1rem; align-items: start; }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .panel-section { padding: 1rem; border-bottom: 1px solid var(--border); }
+    .panel-section:last-child { border-bottom: none; }
+    .section-label { font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--text-dimmer); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; }
+    .field { margin-bottom: 10px; }
+    .field:last-child { margin-bottom: 0; }
+    .field-label { font-size: 12px; color: var(--text-dim); margin-bottom: 5px; display: flex; justify-content: space-between; }
+    .field-label span { font-family: var(--mono); color: var(--accent); }
+    input[type=text], select {
+      width: 100%; font-size: 12px; font-family: var(--mono); padding: 7px 10px;
+      border: 1px solid var(--border); border-radius: 6px; background: var(--surface2); color: var(--text); outline: none; transition: border-color 0.15s;
+    }
+    input[type=text]:focus, select:focus { border-color: var(--accent-dim); }
+    select option { background: var(--surface2); }
+    input[type=range] { width: 100%; accent-color: var(--accent); margin-top: 4px; }
+    input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+    .tab-group { display: flex; gap: 4px; flex-wrap: wrap; }
+    .tab {
+      font-size: 11px; font-family: var(--mono); padding: 4px 10px; border-radius: 5px;
+      border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; transition: all 0.12s;
+    }
+    .tab:hover { border-color: var(--text-dimmer); color: var(--text); }
+    .tab.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 500; }
+    .drop-zone {
+      border: 1px dashed var(--border); border-radius: 6px; padding: 10px 12px;
+      text-align: center; cursor: pointer; font-size: 11px; font-family: var(--mono);
+      color: var(--text-dimmer); transition: all 0.15s; margin-top: 8px;
+    }
+    .drop-zone:hover { border-color: var(--text-dimmer); color: var(--text-dim); background: var(--surface2); }
+    .drop-zone.over { border-color: var(--accent); color: var(--accent); }
+    .drop-zone input { display: none; }
+    .thumb-row { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+    .thumb-row img { width: 34px; height: 34px; object-fit: contain; border-radius: 4px; border: 1px solid var(--border); }
+    .thumb-label { font-size: 11px; font-family: var(--mono); color: var(--text-dim); }
+    .qr-preview-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+    canvas#qrCanvas { width: 52px; height: 52px; border-radius: 4px; border: 1px solid var(--border); image-rendering: pixelated; }
+    #qrStatus { font-family: var(--mono); font-size: 10px; color: var(--text-dimmer); }
+    .btn {
+      font-size: 12px; font-family: var(--mono); padding: 7px 14px;
+      border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; transition: all 0.12s;
+    }
+    .btn:hover { border-color: var(--text-dimmer); }
+    .btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 500; }
+    .btn.primary:hover { background: #d4ff1a; }
+    .btn.sm { font-size: 11px; padding: 4px 10px; }
+    .action-row { display: flex; gap: 8px; padding: 1rem; border-top: 1px solid var(--border); }
+    .right-panel { display: flex; flex-direction: column; gap: 1rem; }
+    .canvas-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    canvas#c { display: block; width: 100%; }
+    .dm-row { display: flex; gap: 10px; align-items: center; padding: 10px 1rem; border-top: 1px solid var(--border); }
+    canvas#dmPreview { width: 120px; height: 75px; border-radius: 4px; border: 1px solid var(--border); image-rendering: pixelated; flex-shrink: 0; }
+    .dm-label { font-size: 11px; font-family: var(--mono); color: var(--text-dimmer); }
+    .hint { font-size: 11px; color: var(--text-dimmer); font-family: var(--mono); line-height: 1.7; padding: 10px 1rem; border-top: 1px solid var(--border); }
+    .hint strong { color: var(--text-dim); }
+    .cond { display: none; }
+    .cond.on { display: block; }
+    .hidden-gen { position: absolute; left: -9999px; top: -9999px; }
+    .depth-hint { font-size: 10px; font-family: var(--mono); color: var(--text-dimmer); margin-top: 5px; }
+    .check-row { display: flex; align-items: center; gap: 8px; }
+    .check-row label { font-size: 12px; color: var(--text-dim); cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>// MAGIC EYE GENERATOR</h1>
+  <span class="tagline">stereogram maker — stare through the screen</span>
+</header>
+
+<div class="grid">
+
+  <!-- LEFT PANEL -->
+  <div class="panel">
+
+    <!-- DOT PATTERN -->
+    <div class="panel-section">
+      <div class="section-label">Dot Pattern</div>
+      <div class="field">
+        <div class="tab-group" id="patTabs">
+          <button class="tab active" onclick="setPatMode('qr',this)">QR Code</button>
+          <button class="tab" onclick="setPatMode('text',this)">Words</button>
+          <button class="tab" onclick="setPatMode('image',this)">Image</button>
+          <button class="tab" onclick="setPatMode('random',this)">Random</button>
+        </div>
+      </div>
+
+      <!-- QR -->
+      <div id="condQR" class="cond on">
+        <div class="field">
+          <div class="field-label">URL or text</div>
+          <input type="text" id="qrInput" value="https://claude.ai" placeholder="URL or any text">
+        </div>
+        <div class="qr-preview-row">
+          <canvas id="qrCanvas" width="52" height="52"></canvas>
+          <div>
+            <div id="qrStatus">—</div>
+            <button class="btn sm" style="margin-top:6px" onclick="rebuildQR()">Update QR</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Words -->
+      <div id="condText" class="cond">
+        <div class="field">
+          <div class="field-label">Repeating words</div>
+          <input type="text" id="wordInput" value="MAGIC EYE " maxlength="80" placeholder="Words to tile...">
+        </div>
+        <div class="field">
+          <div class="field-label">Font size <span id="fontSzVal">11</span>px</div>
+          <input type="range" id="fontSzSlider" min="7" max="24" value="11" step="1">
+        </div>
+      </div>
+
+      <!-- Upload pattern image -->
+      <div id="condImage" class="cond">
+        <div class="drop-zone" id="patDropZone" onclick="document.getElementById('patFileIn').click()">
+          <input type="file" id="patFileIn" accept="image/*">
+          <div id="patDropLabel">Click or drop a pattern image</div>
+          <div style="font-size:10px;margin-top:2px;color:var(--text-dimmer)">Any image — tiles as the dot pattern</div>
+        </div>
+        <div class="thumb-row" id="patThumbRow" style="display:none">
+          <img id="patThumb"><span class="thumb-label" id="patThumbLabel"></span>
+        </div>
+      </div>
+
+      <!-- Random -->
+      <div id="condRandom" class="cond">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--text-dimmer);margin-top:4px;">Pure random black & white noise</div>
+      </div>
+
+      <div class="field" style="margin-top:10px">
+        <div class="field-label">Tile size <span id="tileVal">10</span>px</div>
+        <input type="range" id="tileSlider" min="4" max="50" value="10" step="1">
+      </div>
+      <div class="field">
+        <div class="field-label">Colour mode</div>
+        <select id="colorMode">
+          <option value="bw">Black & white</option>
+          <option value="color">Colourful</option>
+          <option value="pastel">Pastel</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- HIDDEN SHAPE -->
+    <div class="panel-section">
+      <div class="section-label">Hidden Shape</div>
+      <div class="field">
+        <div class="tab-group" id="shapeTabs">
+          <button class="tab active" onclick="setShape('star',this)">Star</button>
+          <button class="tab" onclick="setShape('heart',this)">Heart</button>
+          <button class="tab" onclick="setShape('circle',this)">Circle</button>
+          <button class="tab" onclick="setShape('diamond',this)">Diamond</button>
+          <button class="tab" onclick="setShape('hi',this)">HI!</button>
+          <button class="tab" onclick="setShape('wave',this)">Wave</button>
+          <button class="tab" onclick="setShape('upload',this)">Upload</button>
+        </div>
+      </div>
+      <div id="shapeUploadArea" class="cond">
+        <div class="drop-zone" id="shapeDropZone" onclick="document.getElementById('shapeFileIn').click()">
+          <input type="file" id="shapeFileIn" accept="image/*">
+          <div id="shapeDropLabel">Click or drop shape / depth map</div>
+          <div style="font-size:10px;margin-top:2px;color:var(--text-dimmer)">Black silhouette or greyscale depth map</div>
+        </div>
+        <div class="thumb-row" id="shapeThumbRow" style="display:none">
+          <img id="shapeThumb"><span class="thumb-label" id="shapeThumbLabel">Loaded</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- DEPTH MODE -->
+    <div class="panel-section">
+      <div class="section-label">Depth Mode</div>
+      <div class="field">
+        <select id="depthMode">
+          <option value="distance">Rounded (distance transform)</option>
+          <option value="flat">Flat cutout</option>
+          <option value="gradient">Gradient (top→bottom)</option>
+          <option value="dome">Dome (spherical)</option>
+          <option value="greyscale">Greyscale image (black=close, white=far)</option>
+        </select>
+        <div class="depth-hint" id="depthHint">Pixels deep inside shape appear closest to viewer</div>
+      </div>
+      <div class="field">
+        <div class="field-label">Depth amount <span id="depthVal">22</span></div>
+        <input type="range" id="depthSlider" min="8" max="42" value="22" step="1">
+      </div>
+      <div class="field">
+        <div class="check-row">
+          <input type="checkbox" id="invertCheck">
+          <label for="invertCheck">Invert depth</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- QR CORNERS -->
+    <div class="panel-section">
+      <div class="section-label">Corner QR Codes</div>
+      <div class="check-row">
+        <input type="checkbox" id="cornersEnabled" checked>
+        <label for="cornersEnabled">Scannable QR in corners</label>
+      </div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--text-dimmer);margin-top:6px;">
+        Size = 2× tile size · Uses QR content above · No white border
+      </div>
+    </div>
+
+    <div class="action-row">
+      <button class="btn primary" onclick="generate()">Generate</button>
+      <button class="btn" onclick="saveImg()">Save PNG</button>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="canvas-wrap">
+      <canvas id="c" width="640" height="400"></canvas>
+      <div class="dm-row">
+        <canvas id="dmPreview" width="120" height="75"></canvas>
+        <div>
+          <div class="dm-label" style="color:var(--text-dim);margin-bottom:3px">Depth map preview</div>
+          <div class="dm-label">White = closest · Black = furthest</div>
+        </div>
+      </div>
+      <div class="hint">
+        <strong>How to see it:</strong> Hold close to your face, relax eyes as if staring through the screen, then slowly pull back until the shape pops out.<br><br>
+        <strong>Greyscale depth:</strong> Upload any greyscale image as the shape — black areas float closest, white areas recede. Great for custom depth maps made in Photoshop or even a phone photo.<br><br>
+        <strong>Corner QR codes</strong> are real and scannable. Point your phone camera at a corner!
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="hidden-gen" id="qrHidden"></div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 640, H = 400;
+canvas.width = W; canvas.height = H;
+
+let patMode = 'qr';
+let currentShape = 'star';
+let shapeMask = null;
+let shapeGreyscale = null;
+let patternImgData = null;
+let qrBitmap = null;
+let qrTrimmed = null;
+let textStripCache = {};
+const QR_SRC = 256;
+
+// ── Slider labels
+document.getElementById('depthSlider').oninput = e => document.getElementById('depthVal').textContent = e.target.value;
+document.getElementById('tileSlider').oninput = e => document.getElementById('tileVal').textContent = e.target.value;
+document.getElementById('fontSzSlider').oninput = e => { document.getElementById('fontSzVal').textContent = e.target.value; textStripCache={}; };
+document.getElementById('depthMode').onchange = () => { updateDepthHint(); updateDepthPreview(); };
+document.getElementById('invertCheck').onchange = () => updateDepthPreview();
+
+const DEPTH_HINTS = {
+  distance: 'Pixels deep inside shape appear closest to viewer',
+  flat: 'Entire shape pops out at the same flat height',
+  gradient: 'Top of shape = closest, bottom = furthest',
+  dome: 'Spherical curve — centre is highest point',
+  greyscale: 'Upload a greyscale image: black=close, white=far'
+};
+function updateDepthHint() {
+  document.getElementById('depthHint').textContent = DEPTH_HINTS[document.getElementById('depthMode').value] || '';
+}
+
+// ── Pattern mode tabs
+function setPatMode(mode, btn) {
+  patMode = mode;
+  document.querySelectorAll('#patTabs .tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ['QR','Text','Image','Random'].forEach(id => document.getElementById('cond'+id).classList.remove('on'));
+  const map = {qr:'QR',text:'Text',image:'Image',random:'Random'};
+  document.getElementById('cond'+map[mode]).classList.add('on');
+}
+
+// ── Shape tabs
+function setShape(s, btn) {
+  currentShape = s;
+  if (s !== 'upload') { shapeMask = null; shapeGreyscale = null; }
+  document.querySelectorAll('#shapeTabs .tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('shapeUploadArea').classList.toggle('on', s === 'upload');
+  updateDepthPreview();
+}
+
+// ── Drop zone helper
+function setupDrop(zoneId, inputId, onFile) {
+  const zone = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('over'); if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]); });
+  input.addEventListener('change', e => { if (e.target.files[0]) onFile(e.target.files[0]); });
+}
+
+setupDrop('patDropZone','patFileIn', file => {
+  readImg(file, img => {
+    const tc = document.createElement('canvas'); tc.width=img.width; tc.height=img.height;
+    tc.getContext('2d').drawImage(img,0,0);
+    patternImgData = tc.getContext('2d').getImageData(0,0,img.width,img.height);
+    document.getElementById('patThumb').src = img.src;
+    document.getElementById('patThumbLabel').textContent = `${img.width}×${img.height}`;
+    document.getElementById('patThumbRow').style.display = 'flex';
+    document.getElementById('patDropLabel').textContent = 'Click to replace';
+  });
+});
+
+setupDrop('shapeDropZone','shapeFileIn', file => {
+  readImg(file, img => {
+    const tc = document.createElement('canvas'); tc.width=W; tc.height=H;
+    const tx = tc.getContext('2d');
+    tx.fillStyle='white'; tx.fillRect(0,0,W,H);
+    const scale = Math.min(W/img.width, H/img.height)*0.82;
+    tx.drawImage(img, (W-img.width*scale)/2, (H-img.height*scale)/2, img.width*scale, img.height*scale);
+    const id = tx.getImageData(0,0,W,H).data;
+    shapeMask = new Uint8Array(W*H);
+    shapeGreyscale = new Float32Array(W*H);
+    for (let i=0;i<W*H;i++) {
+      const brightness = (id[i*4]*0.299 + id[i*4+1]*0.587 + id[i*4+2]*0.114)/255;
+      shapeMask[i] = brightness < 0.5 ? 1 : 0;
+      shapeGreyscale[i] = brightness;
+    }
+    currentShape = 'upload';
+    document.querySelectorAll('#shapeTabs .tab').forEach(b => { b.classList.toggle('active', b.textContent==='Upload'); });
+    document.getElementById('shapeUploadArea').classList.add('on');
+    document.getElementById('shapeThumb').src = img.src;
+    document.getElementById('shapeThumbRow').style.display = 'flex';
+    document.getElementById('shapeDropLabel').textContent = 'Click to replace';
+    updateDepthPreview();
+    generate();
+  });
+});
+
+function readImg(file, cb) {
+  const reader = new FileReader();
+  reader.onload = ev => { const img=new Image(); img.onload=()=>cb(img); img.src=ev.target.result; };
+  reader.readAsDataURL(file);
+}
+
+// ── QR code
+function rebuildQR() {
+  const val = document.getElementById('qrInput').value.trim() || 'https://claude.ai';
+  const container = document.getElementById('qrHidden');
+  container.innerHTML = '';
+  document.getElementById('qrStatus').textContent = 'Building…';
+  try {
+    new QRCode(container, {text:val, width:QR_SRC, height:QR_SRC, colorDark:'#000', colorLight:'#fff', correctLevel:QRCode.CorrectLevel.M});
+    setTimeout(() => {
+      const el = container.querySelector('canvas')||container.querySelector('img');
+      if (!el) { document.getElementById('qrStatus').textContent='Error'; return; }
+      const src = el.tagName==='CANVAS' ? el.toDataURL() : el.src;
+      const loader = new Image();
+      loader.onload = () => {
+        const tmp=document.createElement('canvas'); tmp.width=QR_SRC; tmp.height=QR_SRC;
+        tmp.getContext('2d').drawImage(loader,0,0,QR_SRC,QR_SRC);
+        qrBitmap = tmp.getContext('2d').getImageData(0,0,QR_SRC,QR_SRC).data;
+        qrTrimmed = trimQR(loader);
+        const mc=document.getElementById('qrCanvas').getContext('2d');
+        mc.clearRect(0,0,52,52); mc.drawImage(qrTrimmed,0,0,52,52);
+        document.getElementById('qrStatus').textContent = 'Ready ✓';
+        generate();
+      };
+      loader.src = src;
+    }, 150);
+  } catch(e) { document.getElementById('qrStatus').textContent='Invalid'; }
+}
+
+function trimQR(srcImg) {
+  const tmp=document.createElement('canvas'); tmp.width=QR_SRC; tmp.height=QR_SRC;
+  tmp.getContext('2d').drawImage(srcImg,0,0,QR_SRC,QR_SRC);
+  const d=tmp.getContext('2d').getImageData(0,0,QR_SRC,QR_SRC).data;
+  let minX=QR_SRC,maxX=0,minY=QR_SRC,maxY=0;
+  for (let y=0;y<QR_SRC;y++) for (let x=0;x<QR_SRC;x++) {
+    if (d[(y*QR_SRC+x)*4]<128) {
+      if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
+    }
+  }
+  const cw=maxX-minX+1, ch=maxY-minY+1;
+  const out=document.createElement('canvas'); out.width=cw; out.height=ch;
+  out.getContext('2d').drawImage(tmp,minX,minY,cw,ch,0,0,cw,ch);
+  return out;
+}
+
+// ── Depth map
+function distanceTransform(mask, w, h) {
+  const dist=new Float32Array(w*h);
+  for (let i=0;i<w*h;i++) dist[i]=mask[i]?1e9:0;
+  for (let y=0;y<h;y++) for (let x=0;x<w;x++) {
+    if(!mask[y*w+x]) continue;
+    const top=y>0?dist[(y-1)*w+x]+1:1e9, left=x>0?dist[y*w+x-1]+1:1e9;
+    dist[y*w+x]=Math.min(dist[y*w+x],top,left);
+  }
+  for (let y=h-1;y>=0;y--) for (let x=w-1;x>=0;x--) {
+    if(!mask[y*w+x]) continue;
+    const bot=y<h-1?dist[(y+1)*w+x]+1:1e9, right=x<w-1?dist[y*w+x+1]+1:1e9;
+    dist[y*w+x]=Math.min(dist[y*w+x],bot,right);
+  }
+  return dist;
+}
+
+function getDepthMap() {
+  const mode = document.getElementById('depthMode').value;
+  const invert = document.getElementById('invertCheck').checked;
+  let dm;
+
+  if (currentShape === 'upload') {
+    if (mode === 'greyscale' && shapeGreyscale) {
+      // black(0)=close → high depth, white(1)=far → low depth
+      dm = new Float32Array(W*H);
+      for (let i=0;i<W*H;i++) dm[i] = 1 - shapeGreyscale[i];
+    } else if (shapeMask) {
+      const mask = invert ? shapeMask.map(v=>v?0:1) : shapeMask;
+      if (mode==='flat') {
+        dm=new Float32Array(W*H);
+        for (let i=0;i<W*H;i++) dm[i]=mask[i]*0.85;
+      } else if (mode==='gradient') {
+        dm=new Float32Array(W*H);
+        for (let y=0;y<H;y++) for (let x=0;x<W;x++) { const i=y*W+x; dm[i]=mask[i]?(1-y/H)*0.9:0; }
+      } else if (mode==='dome') {
+        const dist=distanceTransform(mask,W,H);
+        let maxD=0; for (let i=0;i<dist.length;i++) if(dist[i]>maxD&&dist[i]<1e8) maxD=dist[i];
+        dm=new Float32Array(W*H);
+        for (let i=0;i<W*H;i++) { if(!mask[i]){dm[i]=0;continue;} const t=dist[i]/maxD; dm[i]=Math.sqrt(Math.max(0,1-(1-t)*(1-t))); }
+      } else {
+        // distance (default)
+        const dist=distanceTransform(mask,W,H);
+        let maxD=0; for (let i=0;i<dist.length;i++) if(dist[i]>maxD&&dist[i]<1e8) maxD=dist[i];
+        dm=new Float32Array(W*H);
+        for (let i=0;i<W*H;i++) dm[i]=mask[i]?Math.sqrt(dist[i]/maxD):0;
+      }
+    } else {
+      dm=new Float32Array(W*H);
+    }
+    // Invert for greyscale mode too if requested
+    if (invert && mode==='greyscale') for (let i=0;i<dm.length;i++) dm[i]=1-dm[i];
+  } else {
+    // Built-in math shapes
+    dm=new Float32Array(W*H);
+    const cx=W/2, cy=H/2;
+    for (let y=0;y<H;y++) for (let x=0;x<W;x++) {
+      let d=0;
+      const nx=(x-cx)/(W*0.38), ny=(y-cy)/(H*0.38);
+      if (currentShape==='star') { const a=Math.atan2(ny,nx),r=Math.sqrt(nx*nx+ny*ny),s=0.3+0.25*Math.cos(5*a); if(r<s)d=Math.max(0,1-r/s); }
+      else if (currentShape==='heart') { const hx=nx*1.2,hy=-ny*1.2+0.2; const v=Math.pow(hx*hx+hy*hy-1,3)-hx*hx*hy*hy*hy; if(v<0)d=Math.min(1,-v*0.7+0.3); }
+      else if (currentShape==='circle') { const r=Math.sqrt(nx*nx+ny*ny); if(r<0.7)d=Math.max(0,1-r/0.7); }
+      else if (currentShape==='diamond') { const r=Math.abs(nx)+Math.abs(ny); if(r<0.85)d=Math.max(0,1-r/0.85); }
+      else if (currentShape==='wave') { const wave=0.35*Math.sin(nx*Math.PI*2.5); const ny2=Math.abs(ny-wave); if(ny2<0.3)d=Math.max(0,1-ny2/0.3)*0.85; }
+      dm[y*W+x]=d;
+    }
+    if (currentShape==='hi') {
+      const tc=document.createElement('canvas');tc.width=W;tc.height=H;
+      const tx=tc.getContext('2d');
+      tx.fillStyle='black';tx.fillRect(0,0,W,H);
+      tx.fillStyle='white';tx.font='bold 180px sans-serif';tx.textAlign='center';tx.textBaseline='middle';
+      tx.fillText('HI!',W/2,H/2);
+      const id=tx.getImageData(0,0,W,H).data;
+      for(let i=0;i<W*H;i++) dm[i]=id[i*4]/255*0.85;
+    }
+    if (invert) for (let i=0;i<dm.length;i++) dm[i]=Math.max(0,Math.min(1,1-dm[i]));
+  }
+  return dm;
+}
+
+function updateDepthPreview() {
+  const dm=getDepthMap();
+  const pc=document.getElementById('dmPreview');
+  const pw=pc.width,ph=pc.height;
+  const pd=pc.getContext('2d').createImageData(pw,ph);
+  for (let y=0;y<ph;y++) for (let x=0;x<pw;x++) {
+    const v=Math.round(dm[Math.floor(y/ph*H)*W+Math.floor(x/pw*W)]*255);
+    const i=(y*pw+x)*4; pd.data[i]=v;pd.data[i+1]=v;pd.data[i+2]=v;pd.data[i+3]=255;
+  }
+  pc.getContext('2d').putImageData(pd,0,0);
+}
+
+// ── Dot colour helpers
+function hslToRgb(h,s,l){
+  s/=100;l/=100;
+  const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l);
+  const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+  return[Math.round(f(0)*255),Math.round(f(8)*255),Math.round(f(4)*255)];
+}
+
+function buildTextStrip(PERIOD, fontSize, mode) {
+  const words=document.getElementById('wordInput').value||'MAGIC EYE ';
+  const tc=document.createElement('canvas');tc.width=PERIOD;tc.height=fontSize+4;
+  const tx=tc.getContext('2d');
+  tx.clearRect(0,0,PERIOD,fontSize+4);
+  tx.font=`${fontSize}px monospace`;tx.textBaseline='top';
+  const allChars=words.repeat(Math.ceil((PERIOD*3)/words.length));
+  let px=0;
+  for (let ci=0;px<PERIOD&&ci<allChars.length;ci++) {
+    const ch=allChars[ci];
+    const h=((px*137)%360+360)%360;
+    if(mode==='bw') tx.fillStyle=Math.random()>0.5?'#111':'#ddd';
+    else if(mode==='color'){const[r,g,b]=hslToRgb(h,65,45);tx.fillStyle=`rgb(${r},${g},${b})`;}
+    else{const[r,g,b]=hslToRgb(h,40,72);tx.fillStyle=`rgb(${r},${g},${b})`;}
+    tx.fillText(ch,px,2);
+    px+=tx.measureText(ch).width;
+  }
+  return tc;
+}
+
+function getDotColor(x, y, tileSize, mode) {
+  const h=((x*137+y*53)%360+360)%360;
+
+  if (patMode==='qr' && qrBitmap) {
+    const normX=(x%tileSize)/tileSize, normY=(y%tileSize)/tileSize;
+    const qx=Math.min(Math.floor(normX*QR_SRC),QR_SRC-1);
+    const qy=Math.min(Math.floor(normY*QR_SRC),QR_SRC-1);
+    const isDark=qrBitmap[(qy*QR_SRC+qx)*4]<128;
+    if(mode==='bw') return isDark?[20,20,20]:[235,235,235];
+    return mode==='color'?hslToRgb(h,65,isDark?35:75):hslToRgb(h,40,isDark?55:85);
+  }
+
+  if (patMode==='text') {
+    const fontSize=parseInt(document.getElementById('fontSzSlider').value);
+    const PERIOD=tileSize*10;
+    const key=`${PERIOD}_${fontSize}_${mode}`;
+    if(!textStripCache[key]) textStripCache[key]=buildTextStrip(PERIOD,fontSize,mode);
+    const strip=textStripCache[key];
+    const sw=strip.width,sh=strip.height;
+    const sx=((x%sw)+sw)%sw, sy=Math.min(y%sh,sh-1);
+    const sd=strip.getContext('2d').getImageData(sx,sy,1,1).data;
+    if(sd[3]<10){
+      if(mode==='bw') return [235,235,235];
+      return mode==='color'?hslToRgb(h,30,80):hslToRgb(h,20,88);
+    }
+    return [sd[0],sd[1],sd[2]];
+  }
+
+  if (patMode==='image' && patternImgData) {
+    const pw=patternImgData.width,ph=patternImgData.height;
+    const px=((x%pw)+pw)%pw, py=((y%ph)+ph)%ph;
+    const pi=(py*pw+px)*4;
+    return [patternImgData.data[pi],patternImgData.data[pi+1],patternImgData.data[pi+2]];
+  }
+
+  // Random
+  const isDark=Math.random()>0.5;
+  if(mode==='bw') return isDark?[20,20,20]:[235,235,235];
+  return mode==='color'?hslToRgb(h,60,isDark?35:72):hslToRgb(h,35,isDark?55:82);
+}
+
+// ── Main generate
+function generate() {
+  if (patMode==='qr' && !qrBitmap) { rebuildQR(); return; }
+  textStripCache={};
+
+  const depth=parseInt(document.getElementById('depthSlider').value);
+  const tileSize=parseInt(document.getElementById('tileSlider').value);
+  const mode=document.getElementById('colorMode').value;
+  const cornersOn=document.getElementById('cornersEnabled').checked;
+  const dm=getDepthMap();
+  const PERIOD=tileSize*Math.max(1,Math.round(90/tileSize));
+  const qs=tileSize*2;
+
+  const imgData=ctx.createImageData(W,H);
+  const pix=imgData.data;
+
+  for (let y=0;y<H;y++) {
+    const same=new Int32Array(W).fill(-1);
+    for (let x=0;x<W;x++) {
+      const shift=Math.round(dm[y*W+x]*depth);
+      if(x-PERIOD+shift>=0) same[x]=x-PERIOD+shift;
+    }
+    const rowColor=new Array(W).fill(null);
+    for (let x=0;x<W;x++) {
+      rowColor[x]=same[x]===-1?getDotColor(x,y,tileSize,mode):(rowColor[same[x]]||getDotColor(x,y,tileSize,mode));
+    }
+    for (let x=0;x<W;x++) {
+      const[r,g,b]=rowColor[x]||[180,180,180];
+      const i=(y*W+x)*4; pix[i]=r;pix[i+1]=g;pix[i+2]=b;pix[i+3]=255;
+    }
+  }
+  ctx.putImageData(imgData,0,0);
+
+  if (cornersOn && qrTrimmed) {
+    [[0,0],[W-qs,0],[0,H-qs],[W-qs,H-qs]].forEach(([cx,cy])=>ctx.drawImage(qrTrimmed,cx,cy,qs,qs));
+  }
+
+  updateDepthPreview();
+}
+
+function saveImg(){
+  const a=document.createElement('a');
+  a.download='magic-eye.png';
+  a.href=canvas.toDataURL();
+  a.click();
+}
+
+// Init
+updateDepthHint();
+updateDepthPreview();
+rebuildQR();
+</script>
+</body>
+</html>
